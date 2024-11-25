@@ -1,4 +1,4 @@
-name: CI/CD for react Patient Data 
+name: CI/CD Pipeline
 
 on:
   push:
@@ -9,46 +9,60 @@ jobs:
   # Build Job
   build:
     runs-on: ubuntu-latest
+    
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-      - name: Install Node
-        uses: actions/setup-node@v3
+      - name: Set up AWS CLI
+        uses: aws-actions/configure-aws-credentials@v1
         with:
-          node-version: 18.x
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: 'us-east-1'
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: |
           cd data
           npm install
+
+      - name: Run tests
+        run: |
+          cd data
+          npm test
 
       - name: Build Project
         run: |
           cd data
           npm run build
 
+      - name: Update DynamoDB (Optional - Update with relevant data)
+        run: |
+          aws dynamodb put-item --table-name your-table-name --item file://item.json
+          # Modify this part to fit your data updates for DynamoDB
+
       - name: Upload artifact to enable deployment
         uses: actions/upload-artifact@v3
         with:
-          name: poduction file
+          name: production-file
           path: ./data/build
 
   # Deploy Job
   deploy:
-   
     needs: build
-    
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
       - name: Download artifact
         uses: actions/download-artifact@v3
         with:
-          name: poduction file
+          name: production-file
           path: ./data/build
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
-          github_token: ${{ secrets.KEY }} #this is the key of the access token
+          github_token: ${{ secrets.KEY }}  # Replace with your GitHub token secret
           publish_dir: ./data/build
