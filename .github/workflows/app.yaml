@@ -6,7 +6,6 @@ on:
       - main
 
 jobs:
-  # Build Job
   build:
     runs-on: ubuntu-latest
     
@@ -36,10 +35,20 @@ jobs:
           cd data
           npm run build
 
-      - name: Update DynamoDB (Optional - Update with relevant data)
+      - name: Update DynamoDB
         run: |
           aws dynamodb put-item --table-name your-table-name --item file://item.json
           # Modify this part to fit your data updates for DynamoDB
+
+      - name: Invoke Lambda function
+        run: |
+          aws lambda invoke --function-name your-lambda-function-name \
+          --payload '{"id": "12345", "data": "sample-data"}' \
+          output.json
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: 'us-east-1'
 
       - name: Upload artifact to enable deployment
         uses: actions/upload-artifact@v3
@@ -47,7 +56,6 @@ jobs:
           name: production-file
           path: ./data/build
 
-  # Deploy Job
   deploy:
     needs: build
     runs-on: ubuntu-latest
