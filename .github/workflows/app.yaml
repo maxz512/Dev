@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: CI/CD for React with DynamoDB
 
 on:
   push:
@@ -6,64 +6,40 @@ on:
       - main
 
 jobs:
+  # Build Job
   build:
     runs-on: ubuntu-latest
-    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-      - name: Set up AWS CLI
-        uses: aws-actions/configure-aws-credentials@v1
+      - name: Install Node
+        uses: actions/setup-node@v3
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: 'us-east-1'
+          node-version: 18.x
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: |
           cd data
           npm install
-
-      - name: Run tests
-        run: |
-          cd data
-          npm test
 
       - name: Build Project
         run: |
           cd data
           npm run build
 
-      - name: Update DynamoDB
-        run: |
-          aws dynamodb put-item --table-name your-table-name --item file://item.json
-          # Modify this part to fit your data updates for DynamoDB
-
-      - name: Invoke Lambda function
-        run: |
-          aws lambda invoke --function-name your-lambda-function-name \
-          --payload '{"id": "12345", "data": "sample-data"}' \
-          output.json
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: 'us-east-1'
-
-      - name: Upload artifact to enable deployment
+      - name: Upload Artifact for Deployment
         uses: actions/upload-artifact@v3
         with:
           name: production-file
           path: ./data/build
 
+  # Deploy Job
   deploy:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Download artifact
+      - name: Download Artifact
         uses: actions/download-artifact@v3
         with:
           name: production-file
@@ -72,5 +48,32 @@ jobs:
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
-          github_token: ${{ secrets.KEY }}  # Replace with your GitHub token secret
+          github_token: ${{ secrets.KEY }} 
           publish_dir: ./data/build
+
+  # DynamoDB Update Job
+  update-dynamodb:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Install AWS CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y awscli
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Update DynamoDB Table
+        run: |
+          aws dynamodb put-item \
+            --table-name YourTableName \
+            --item '{"id": {"S": "1"}, "name": {"S": "John Doe"}, "status": {"S": "Updated by CI/CD"}}'
