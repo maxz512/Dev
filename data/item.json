@@ -1,0 +1,14 @@
+{
+  "PatientID": {
+    "S": "12345"
+  },
+  "Name": {
+    "S": "John Doe"
+  },
+  "Age": {
+    "N": "45"
+  },
+  "Diagnosis": {
+    "S": "Hypertension"
+  }
+}
