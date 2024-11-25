@@ -1,4 +1,4 @@
-name: CI/CD with DynamoDB
+name: CI/CD for React Patient Data
 
 on:
   push:
@@ -6,50 +6,59 @@ on:
       - main
 
 jobs:
-  build-and-deploy:
+  # Build Job
+  build:
     runs-on: ubuntu-latest
-
     steps:
-    # Step 1: Checkout the Code
-    - name: Checkout Code
-      uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-    # Step 2: Install Node.js
-    - name: Install Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: 18.x
+      - name: Install Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18.x
 
-    # Step 3: Install Dependencies
-    - name: Install Dependencies
-      run: |
-        cd data
-        npm install
+      - name: Install Dependencies
+        run: |
+          cd data
+          npm install
 
-    # Step 4: Build the React Application
-    - name: Build React Application
-      run: |
-        cd data
-        npm run build
+      - name: Build Project
+        run: |
+          cd data
+          npm run build
 
-    # Step 5: Deploy to GitHub Pages
-    - name: Deploy to GitHub Pages
-      uses: peaceiris/actions-gh-pages@v3
-      with:
-        github_token: ${{ secrets.KEY }} # Replace this with your GitHub personal access token secret
-        publish_dir: ./data/build
+      - name: Upload artifact to enable deployment
+        uses: actions/upload-artifact@v3
+        with:
+          name: production file
+          path: ./data/build
 
-    # Step 6: Configure AWS Credentials
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v3
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ secrets.AWS_REGION }}
+  # Deploy Job
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: production file
+          path: ./data/build
 
-    # Step 7: Update DynamoDB Table
-    - name: Update DynamoDB Table
-      run: |
-        aws dynamodb put-item \
-          --table-name Patients \
-          --item '{"id": {"S": "1"}, "name": {"S": "John Doe"}, "status": {"S": "Updated by CI/CD"}}'
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.KEY }}
+          publish_dir: ./data/build
+
+      # Update DynamoDB
+      - name: Set up AWS CLI
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: 'us-east-1'  # Replace with your region
+
+      - name: Update DynamoDB with new data
+        run: |
+          aws dynamodb put-item --table-name Patients --item file://data/item.json
