@@ -48,16 +48,17 @@ jobs:
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
-          github_token: ${{ secrets.KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./data/build
 
       # Update DynamoDB
       - name: Set up AWS CLI
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: 'us-east-1'  # Replace with your region
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}  
+          aws-region: 'us-east-1'
 
       - name: Update DynamoDB with new data
         run: |
