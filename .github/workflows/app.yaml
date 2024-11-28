@@ -1,68 +1,69 @@
-name: CI/CD for React Patient Data
+name: Deploy Lambda Function
 
 on:
   push:
     branches:
       - main
-permissions:
-  contents: write
-  pages: write  
-  
+
 jobs:
-  # Build Job
-  build:
+  deploy-lambda:
     runs-on: ubuntu-latest
+
     steps:
+      # Step 1: Check out the code
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Install Node
-        uses: actions/setup-node@v3
-        with:
-          node-version: 18.x
-
-      - name: Install Dependencies
-        run: |
-          cd data
-          npm install
-
-      - name: Build Project
-        run: |
-          cd data
-          npm run build
-
-      - name: Upload artifact to enable deployment
-        uses: actions/upload-artifact@v3
-        with:
-          name: production file
-          path: ./data/build
-
-  # Deploy Job
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: production file
-          path: ./data/build
-
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./data/build
-
-      # Update DynamoDB
-      - name: Set up AWS CLI
-        uses: aws-actions/configure-aws-credentials@v2
+      # Step 2: Set up AWS CLI
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}  
-          aws-region: 'us-east-1'
+          aws-region: us-east-1
 
-      - name: Update DynamoDB with new data
+      # Step 3: Install dependencies for AWS CLI
+      - name: Install AWS CLI
         run: |
-          aws dynamodb put-item --table-name Patients --item file://data/item.json
+          sudo apt-get update
+          sudo apt-get install -y zip unzip
+
+      # Step 4: Create a ZIP file for the Lambda function
+      - name: Package Lambda Function
+        run: zip updatePatientFunction.zip index.js
+
+      # Step 5: Deploy the Lambda function
+      - name: Deploy Lambda Function
+        run: |
+          aws lambda create-function \
+              --function-name updatePatientFunction \
+              --runtime nodejs22.x \
+              --role ${{ secrets.LAMBDA_IAM_ROLE_ARN }} \
+              --handler index.handler \
+              --zip-file fileb://updatePatientFunction.zip \
+          || aws lambda update-function-code \
+              --function-name updatePatientFunction \
+              --zip-file fileb://updatePatientFunction.zip
+
+      # Step 6: Add permissions to the Lambda function
+      - name: Add Permissions to Lambda
+        run: |
+          aws lambda add-permission \
+              --function-name updatePatientFunction \
+              --statement-id dynamodb-access \
+              --action "dynamodb:UpdateItem" \
+              --principal "lambda.amazonaws.com" \
+          || echo "Permission already exists"
+
+      # Step 7: Create or update API Gateway
+      - name: Create API Gateway
+        id: create-api
+        run: |
+          API_ID=$(aws apigatewayv2 create-api --name "PatientAPI" --protocol-type HTTP --target arn:aws:lambda:us-east-1:${{ secrets.AWS_ACCOUNT_ID }}:function:updatePatientFunction --query 'ApiId' --output text) \
+          || API_ID=$(aws apigatewayv2 get-apis --query "Items[?Name=='PatientAPI'].ApiId" --output text)
+          echo "API_ID=${API_ID}" >> $GITHUB_ENV
+
+      # Step 8: Deploy API Gateway
+      - name: Deploy API Gateway
+        run: |
+          aws apigatewayv2 create-deployment --api-id ${{ env.API_ID }} --stage-name prod
