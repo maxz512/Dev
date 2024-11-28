@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './App.css'; // Add custom styles here
+
+const API_URL = 'https://jkouijtzj8.execute-api.us-east-1.amazonaws.com/production/patients'; // Your API Gateway URL
 
 function App() {
   const [patients, setPatients] = useState([]);
@@ -25,22 +27,67 @@ function App() {
     setPatientIdToRetrieve(e.target.value);
   };
 
-  const handleSubmit = (e) => {
+  // Add patient data to the database
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (patients.some((p) => p.id === patientData.id)) {
       setMessage('Error: Patient ID must be unique.');
       return;
     }
-    setPatients([...patients, patientData]);
-    setMessage('Patient added successfully!');
-    setPatientData({ id: '', name: '', age: '', condition: '' });
+
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patientData)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to add patient');
+      }
+
+      setPatients([...patients, patientData]);
+      setMessage('Patient added successfully!');
+      setPatientData({ id: '', name: '', age: '', condition: '' });
+    } catch (error) {
+      setMessage('Error adding patient: ' + error.message);
+    }
   };
 
-  const handleRetrieve = () => {
-    const patient = patients.find((p) => p.id === patientIdToRetrieve);
-    setRetrievedPatient(patient || 'Patient not found');
-    setPatientIdToRetrieve('');
+  // Retrieve patient data by ID
+  const handleRetrieve = async () => {
+    try {
+      const response = await fetch(`${API_URL}?id=${patientIdToRetrieve}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch patient');
+      }
+
+      const patient = await response.json();
+      setRetrievedPatient(patient || 'Patient not found');
+      setPatientIdToRetrieve('');
+    } catch (error) {
+      setMessage('Error retrieving patient: ' + error.message);
+    }
   };
+
+  // Fetch all patients when the component mounts
+  useEffect(() => {
+    const fetchAllPatients = async () => {
+      try {
+        const response = await fetch(API_URL);
+        if (!response.ok) {
+          throw new Error('Failed to fetch patients');
+        }
+
+        const data = await response.json();
+        setPatients(data);
+      } catch (error) {
+        setMessage('Error fetching patients: ' + error.message);
+      }
+    };
+
+    fetchAllPatients();
+  }, []);
 
   return (
     <div className="App">
